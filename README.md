@@ -76,4 +76,4 @@ To see the random generated password: `tofu output -json | jq .`
 
 Update the main.tf chang the source = "./modules/vm" to point to the git repo module.
 
-`source = "https://github.com/dinodem/proxmox-terraform/tree/main/modules/vm"`
+`source = "git::https://github.com/dinodem/proxmox-terraform/tree/main/modules/vm"`
