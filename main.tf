@@ -8,34 +8,8 @@ terraform {
 }
 
 provider "proxmox" {
-  endpoint = "https://some-ip-or-dns-goes-here:8006"
-  #username = var.virtual_environment_username  (Uncomment in case you want to use variables, otherwise just export the username and password)
-  #password = var.virtual_environment_password
-
-### Want to use plain username and password? Uncomment and set username and password.
-#  username = "username@realm"
-#  password = "a-strong-password"
-
+  endpoint = "https://10.10.0.198:8006"
   insecure = true
-}
-
-module "proxmox_vms" {
-  for_each = local.vm_configs
-  ipv4_address = each.value.ipv4_address
-  ipv4_gateway = each.value.ipv4_gateway
-  cpu_cores = each.value.cpu_cores
-  cpu_type  = each.value.cpu_type
-  
-  source = "./modules/vm"
-
-  vm_name        = each.key
-  node_name      = "pve"
-  vm_id          = local.vm_ids[each.key]
-  template_vm_id = 9000  # Replace with your template VM ID
-  memory         = each.value.memory
-  ssh_public_keys = each.value.ssh_keys
-  disk_size      = 20
-  datastore_id   = "local-lvm"
 }
 
 resource "random_password" "vm_password" {
@@ -43,26 +17,44 @@ resource "random_password" "vm_password" {
   special = true
 }
 
-
+module "proxmox_vms" {
+  source = "./modules/vm"
+  vm_configs = { for name, config in local.vm_configs : 
+    name => merge(config, { vm_id = local.vm_ids[name] })
+  }
+  node_name    = "pve" ## Set your node name.
+  vm_password  = random_password.vm_password.result
+ # vm_username  = "username" ## Uncomment to override default username from variables ubuntu
+}
 
 locals {
-  base_vm_id = 1001  # Starting ID
+  base_vm_id = 599
   vm_configs = {
-    "ubuntu-clone-1" = {
-      memory    = 768
-      cpu_cores = 2
-      cpu_type  = "x86-64-v2-AES"
-      ssh_keys  = ["ssh-ed25519 AAAAC3Nza..."]
-      ipv4_address = "10.10.0.189/24"
-      ipv4_gateway = "10.10.0.1"
-    },
-    "ubuntu-clone-2" = {
-      memory    = 1024
-      cpu_cores = 2
-      cpu_type  = "x86-64-v2-AES"
-      ssh_keys  = ["ssh-ed25519 AAAAC3Nza..."]
-      ipv4_address = "10.10.0.190/24"
-      ipv4_gateway = "10.10.0.1"
+    "server-clone-1" = {
+      memory         = 8192
+      cpu_cores      = 2
+      cpu_type       = "x86-64-v2-AES"
+      disk_size      = 55
+      ssh_keys       = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL/8VzmhjGiVwF5uRj4TXWG0M8XcCLN0328QkY0kqkNj @example"]
+      ipv4_address   = "10.10.0.189/24"
+      ipv4_gateway   = "10.10.0.1"
+      dns_servers    = ["10.10.0.100"]  ## Comment out if you want to use default value from variables 1.1.1.1, 1.0.0.1 
+    #  vga_type       = "serial0" ## Uncomment to override default value for vga_type
+    #  vga_memory     = 16 ## Uncomment to override default value for vga_memory
+    #  template_vm_id = 9000 ### Comment out if you want to use default value from variables
+    }
+    "server-clone-2" = {
+      memory         = 4096
+      cpu_cores      = 1
+      cpu_type       = "x86-64-v2-AES"
+      disk_size      = 40
+      ssh_keys       = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL/8VzmhjGiVwF5uRj4TXWG0M8XcCLN0328QkY0kqkNj @example"]
+      ipv4_address   = "10.10.0.190/24"
+      ipv4_gateway   = "10.10.0.1"
+      dns_servers    = ["1.1.1.1", "1.0.0.1"]   
+    #  vga_type       = "serial0" ## Uncomment to override default value for vga_type
+    #  vga_memory     = 16 ## Uncomment to override default value for vga_memoryy
+      template_vm_id = 9000
     }
   }
 
