@@ -105,6 +105,7 @@ Run tofu plan
 The output should be something like this:
 
 ```
+```
 OpenTofu will perform the following actions:
 
   # module.proxmox_vms["server-clone-1"].proxmox_virtual_environment_vm.vm will be updated in-place
