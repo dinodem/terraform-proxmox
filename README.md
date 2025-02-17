@@ -95,7 +95,11 @@ locals {
 
 ### Extend disk on VM
 
-cloud-initramfs-growroot
+```
+Make sure your server has follwoing installed: cloud-initramfs-growroot
+
+```
+
 ```
 
 Change the value of the disk_size in locales
