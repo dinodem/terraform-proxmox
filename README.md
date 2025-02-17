@@ -96,7 +96,7 @@ locals {
 ### Extend disk on VM
 
 ```
-Make sure your server has follwoing installed: cloud-initramfs-growroot
+Make sure to install cloud-initramfs-growroot on your servers.
 
 ```
 
