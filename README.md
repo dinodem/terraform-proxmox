@@ -6,6 +6,53 @@ This module helps you easily create and manage multiple Virtual Machines in Prox
 
 Copy/clone the script to your Proxmox server, make it executable `chmod +x ubuntu-template-creator.sh`, then run the script from the Proxmox console or SSH `./ubuntu-template-creator.sh`. Choose your storage, Ubuntu flavor, and let the script do the rest for you. Adjust the template ID in your main.tf to use it for deploying VMs.
 
+```bash
+============================================
+   Proxmox Ubuntu Template Creator Script   
+============================================
+
+This script will help you create an Ubuntu cloud image template on your Proxmox server.
+You will be prompted for some configuration options.
+
+
+===== Prerequisites Check =====
+==> Checking for required packages...
+==> libguestfs-tools is already installed.
+
+===== Configuration Options =====
+Available storages on this Proxmox server:
+  - SSD
+  - local-lvm
+
+Enter the storage name to use [default: local-zfs]: SSD
+==> Using storage: SSD
+Enter VM ID for the template [default: 9000]: 9001
+==> Using VM ID: 9001
+Enter a name for the template [default: ubuntu-cloud-template]: ubuntu-template
+==> Using VM name: ubuntu-template
+
+Available Ubuntu versions:
+  1) Plucky (24.10) [default]
+  2) Noble (24.04 LTS)
+  3) Jammy (22.04 LTS)
+  4) Focal (20.04 LTS)
+Select Ubuntu version [1-4]: 1
+==> Selected Ubuntu Plucky (24.10)
+Enter memory size in MB [default: 2048]: 
+Enter number of CPU cores [default: 2]: 
+==> VM Resources: 2048 MB RAM, 2 cores
+
+===== Review Configuration =====
+Please review your settings:
+  Storage:       SSD
+  VM ID:         9001
+  VM Name:       ubuntu-template
+  Ubuntu:        plucky
+  Memory:        2048 MB
+  CPU Cores:     2
+
+```
+
 ## Getting Started
 
 ### Prerequisites
