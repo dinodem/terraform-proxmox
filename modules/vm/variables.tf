@@ -1,4 +1,3 @@
-
 variable "dns_servers" {
   type        = list(string)
   default     = ["1.1.1.1", "1.0.0.1"] # Default DNS servers
@@ -23,7 +22,7 @@ variable "node_name" {
 
 variable "datastore_id" {
   type    = string
-  default = "local-lvm"
+  default = "SSD"
 }
 
 variable "vm_password" {
@@ -41,19 +40,37 @@ variable "template_vm_id" {
   description = "Default template VM ID for cloning"
 }
 
-
+# Define the disk object
 variable "vm_configs" {
   type = map(object({
     vm_id          = number
     memory         = number
     cpu_cores      = number
     cpu_type       = string
-    disk_size      = number
-    ipv4_address   = string
-    ipv4_gateway   = string
-    dns_servers    = optional(list(string))  
+    
+
+    disks = list(object({
+      datastore_id = optional(string)
+      interface    = string
+      size         = number
+      file_format  = optional(string, "raw")
+    }))
+
+    network_devices = list(object({
+      bridge  = optional(string)
+      model   = optional(string)
+      enabled = optional(bool)
+      vlan_id = optional(number) 
+    }))
+    
+    ip_configs = list(object({
+      address = string
+      gateway = string
+    }))
+    
+    dns_servers    = optional(list(string))
     ssh_keys       = list(string)
-    vga_type       = optional(string) 
+    vga_type       = optional(string)
     vga_memory     = optional(number)
     template_vm_id = optional(number)
   }))

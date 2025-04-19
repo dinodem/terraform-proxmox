@@ -1,143 +1,419 @@
-# Terraform / OpenTofu module for Proxmox
+# Proxmox VM OpenTofu / Terraform Module
 
-## How to use
+This module helps you easily create and manage multiple Virtual Machines in Proxmox using OpenTofu or Terraform. It supports multiple disks, network interfaces with VLAN tagging, and IP configurations.
 
-### Create VM templete with ubuntu cloud image (run in terminal of your proxmox)
+## Creating Ubuntu Cloud Image Template
 
-Change local-zfs to your storage !!
+Copy/clone the script to your Proxmox server, make it executable `chmod +x ubuntu-template-creator.sh`, then run the script from the Proxmox console or SSH `./ubuntu-template-creator.sh`. Choose your storage, Ubuntu flavor, and let the script do the rest for you. Adjust the template ID in your main.tf to use it for deploying VMs.
 
-```
-# installing libguestfs-tools only required once, prior to first run
-sudo apt update -y
-sudo apt install libguestfs-tools -y
+## Getting Started
 
-wget https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
-sudo virt-customize -a noble-server-cloudimg-amd64.img --install qemu-guest-agent
-sudo qm create 9000 --name "noble-server-cloudimg-template" --memory 2048 --cores 2 --net0 virtio,bridge=vmbr0
-sudo qm importdisk 9000 noble-server-cloudimg-amd64.img local-zfs
-sudo qm set 9000 --scsihw virtio-scsi-pci --scsi0 local-zfs:vm-9000-disk-0
-sudo qm set 9000 --boot c --bootdisk scsi0
-sudo qm set 9000 --ide2 local-zfs:cloudinit
-sudo qm set 9000 --serial0 socket --vga serial0
-sudo qm set 9000 --agent enabled=1
-sudo qm template 9000
-rm noble-server-cloudimg-amd64.img
+### Prerequisites
 
-```
-## Clone repo and change following:
+1. Install [OpenTofu](https://opentofu.org/docs/intro/install/) (version 1.0.0 or later)
+2. Have access to a Proxmox server
 
-```
-## main.tf
+### Setting Up Your Project
 
-endpoint = "https://proxmox-url:8006" == Set to your Proxmox IP / dns name.
+There are two ways to use this module:
 
-If you are using username and password export it or set it in the .env
+#### Method 1: Clone the Repository
 
-export PROXMOX_VE_USERNAME="username@realm"
-export PROXMOX_VE_PASSWORD='a-strong-password'
+```bash
+# Clone the repository
+git clone https://github.com/dinodem/terraform-proxmox.git
+cd terraform-proxmox
 
-Set your templete ID, if you followed the commands above, the ID should be 9000 in this case no need to change it.
+# Create your configuration file
+touch main.tf
 
-Set node_name and edit the locales for your VMs.
-
-A few lines optional in the vms such as
-
-VGA_TYPE, VGA_MEMORY, DNS_SERVERS and TEMPLATE_VM_ID. They will use default values from modues/vm/variables.tf 
-
-base_mv_id = ID to start with, so first vm will have id 599, second vm will have id 600 and so on.
-
-VGA_TYPE default value is serial0 this needs to be serial0 if you are using ubuntu cloud image or the console won't work.
-
+# Open main.tf in your editor and add your configuration
 ```
 
-### How to deploy/clone VM
+### Authentication with Proxmox
+Read more here: https://registry.terraform.io/providers/bpg/proxmox/latest/docs#authentication-methods-comparison
+Before using this module, you need to provide your Proxmox credentials. You have three options:
+
+#### Option 1: Environment Variables (Recommended for Development)
+
+```bash
+export PROXMOX_VE_ENDPOINT="https://your-proxmox-server:8006"
+export PROXMOX_VE_USERNAME="root@pam"
+export PROXMOX_VE_PASSWORD="your-password-here"
+export PROXMOX_VE_INSECURE="true"  # Only use if you have self-signed certificates
 ```
-Adjust the values and save the main.tf
 
-your main.tf must point to the module 
+#### Option 2: OpenTofu Variables
 
-source = "./modules/vm" or source = "git::https://github.com/dinodem/proxmox-terraform/tree/main/modules/vm" if you want to point directly to the Git repository.
+1. Define variables in `variables.tf`:
 
-server-clone-1 = server name
+```terraform
+variable "proxmox_endpoint" {
+  description = "The Proxmox API endpoint"
+  type        = string
+}
+
+variable "proxmox_username" {
+  description = "Username for Proxmox authentication"
+  type        = string
+}
+
+variable "proxmox_password" {
+  description = "Password for Proxmox authentication"
+  type        = string
+  sensitive   = true
+}
+
+variable "proxmox_insecure" {
+  description = "Skip TLS verification"
+  type        = bool
+  default     = false
+}
+```
+
+2. Use the variables in `main.tf`:
+
+```terraform
+provider "proxmox" {
+  endpoint = var.proxmox_endpoint
+  username = var.proxmox_username
+  password = var.proxmox_password
+  insecure = var.proxmox_insecure
+}
+```
+
+3. Create a `terraform.tfvars` file (add to .gitignore):
+
+```terraform
+proxmox_endpoint  = "https://your-proxmox-server:8006"
+proxmox_username  = "root@pam"
+proxmox_password  = "your-password-here"
+proxmox_insecure  = true
+```
+
+#### Option 3: API Tokens (Recommended for Production)
+
+```bash
+export PROXMOX_VE_ENDPOINT="https://your-proxmox-server:8006"
+export PROXMOX_VE_API_TOKEN="terraform@pve!provider=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+```
+
+## Using the Module
+
+### Basic Configuration
+
+Create a `main.tf` file in your project root:
+
+```terraform
+terraform {
+  required_providers {
+    proxmox = {
+      source  = "bpg/proxmox"
+      version = "0.71.0"
+    }
+  }
+}
+
+provider "proxmox" {
+  endpoint = "https://your-proxmox-server:8006"
+  insecure = true
+  # Authentication will use environment variables
+}
+
+module "proxmox_vms" {
+  source = "./modules/vm"
+  
+  node_name   = "pve"  # Your Proxmox node name
+  vm_password = "your-vm-password"  # Or use random_password
+  
+  vm_configs = {
+    "web-server" = {
+      vm_id     = 100
+      memory    = 4096
+      cpu_cores = 2
+      cpu_type  = "host"
+      
+      disks = [
+        {
+          interface    = "scsi0"
+          size         = 20  # 20GB
+          file_format  = "raw"
+          datastore_id = "local-lvm"
+        }
+      ]
+      
+      network_devices = [
+        {
+          bridge  = "vmbr0"
+          model   = "virtio"
+          enabled = true
+          vlan    = null  # No VLAN tagging
+        }
+      ]
+      
+      ip_configs = [
+        {
+          address = "192.168.1.100/24"
+          gateway = "192.168.1.1"
+        }
+      ]
+      
+      ssh_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI..."]
+    }
+  }
+}
+```
+
+### Running OpenTofu Commands
+
+```bash
+# Initialize
+tofu init
+
+# Preview changes
+tofu plan
+
+# Apply changes
+tofu apply
+
+# Remove resources
+tofu destroy
+```
+
+## Advanced Features
+
+### Multiple Disks
+
+```terraform
+disks = [
+  {
+    interface    = "scsi0"
+    size         = 20  # System disk (20GB)
+    file_format  = "raw"
+    datastore_id = "SSD"
+  },
+  {
+    interface    = "scsi1"
+    size         = 100  # Data disk (100GB)
+    file_format  = "raw"
+    datastore_id = "HDD"
+  }
+]
+```
+
+### Multiple Network Interfaces with VLAN Support
+
+```terraform
+network_devices = [
+  {
+    bridge  = "vmbr0"
+    model   = "virtio"
+    enabled = true
+    vlan    = 100  # Assign to VLAN 100
+  },
+  {
+    bridge  = "vmbr0"
+    model   = "virtio"
+    enabled = true
+    vlan    = 200  # Assign to VLAN 200
+  }
+]
+
+# Each network device needs its own IP configuration
+ip_configs = [
+  {
+    address = "192.168.100.10/24"  # IP on VLAN 100
+    gateway = "192.168.100.1"
+  },
+  {
+    address = "192.168.200.10/24"  # IP on VLAN 200
+    gateway = "192.168.200.1"
+  }
+]
+```
+
+### Multiple VMs
+
+```terraform
+vm_configs = {
+  "web-server" = {
+    vm_id     = 100
+    memory    = 4096
+    cpu_cores = 2
+    # ... other configurations
+  },
+  "database" = {
+    vm_id     = 101
+    memory    = 8192
+    cpu_cores = 4
+    # ... other configurations
+  }
+}
+```
+
+## Complete Example
+
+```terraform
+terraform {
+  required_providers {
+    proxmox = {
+      source  = "bpg/proxmox"
+      version = "0.71.0"
+    }
+  }
+}
+
+provider "proxmox" {
+  endpoint = "https://10.10.0.198:8006"
+  insecure = true
+  # Authentication through environment variables
+}
+
+resource "random_password" "vm_password" {
+  length  = 32
+  special = true
+}
+
+module "proxmox_vms" {
+  source = "./modules/vm"
+  vm_configs = { for name, config in local.vm_configs :
+    name => merge(config, { vm_id = local.vm_ids[name] })
+  }
+  node_name    = "pve"
+  vm_password  = random_password.vm_password.result
+}
 
 locals {
-  base_vm_id = 599
+  base_vm_id = 699
   vm_configs = {
-    "server-clone-1" = {
-      memory         = 8192
-      cpu_cores      = 2
-      cpu_type       = "x86-64-v2-AES"
-      disk_size      = 55
-      ssh_keys       = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL/8VzmhjGiVwF5uRj4TXWG0M8XcCLN0328QkY0kqkNj @example"]
-      ipv4_address   = "10.10.0.189/24"
-      ipv4_gateway   = "10.10.0.1"
-      dns_servers    = ["10.10.0.100"]  ## Comment out if you want to use default value from variables 1.1.1.1, 1.0.0.1 
-    #  vga_type       = "serial0" ## Uncomment to override default value for vga_type
-    #  vga_memory     = 16 ## Uncomment to override default value for vga_memory
-    #  template_vm_id = 9000 ### Comment out if you want to use default value from variables
-    }
-    "server-clone-2" = {
-      memory         = 4096
-      cpu_cores      = 1
-      cpu_type       = "x86-64-v2-AES"
-      disk_size      = 40
-      ssh_keys       = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL/8VzmhjGiVwF5uRj4TXWG0M8XcCLN0328QkY0kqkNj @example"]
-      ipv4_address   = "10.10.0.190/24"
-      ipv4_gateway   = "10.10.0.1"
-      dns_servers    = ["1.1.1.1", "1.0.0.1"]   
-    #  vga_type       = "serial0" ## Uncomment to override default value for vga_type
-    #  vga_memory     = 16 ## Uncomment to override default value for vga_memoryy
-      template_vm_id = 9000
+    "web-server" = {
+      memory    = 4096
+      cpu_cores = 2
+      cpu_type  = "host"
+      
+      disks = [
+        {
+          interface    = "scsi0"
+          size         = 20
+          file_format  = "raw"
+          datastore_id = null  # Uses default
+        }
+      ]
+      
+      network_devices = [
+        {
+          bridge  = "vmbr0"
+          model   = "virtio"
+          enabled = true
+          vlan    = 10  # VLAN 10 for web servers
+        }
+      ]
+      
+      ip_configs = [
+        {
+          address = "192.168.10.100/24"
+          gateway = "192.168.10.1"
+        }
+      ]
+      
+      ssh_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."]
+    },
+    
+    "database" = {
+      memory    = 8192
+      cpu_cores = 4
+      cpu_type  = "host"
+      
+      disks = [
+        {
+          interface    = "scsi0"
+          size         = 40
+          file_format  = "raw"
+          datastore_id = null
+        },
+        {
+          interface    = "scsi1"
+          size         = 200
+          file_format  = "raw"
+          datastore_id = "HDD"
+        }
+      ]
+      
+      network_devices = [
+        {
+          bridge  = "vmbr0"
+          model   = "virtio"
+          enabled = true
+          vlan    = 20  # VLAN 20 for databases
+        }
+      ]
+      
+      ip_configs = [
+        {
+          address = "192.168.20.100/24"
+          gateway = "192.168.20.1"
+        }
+      ]
+      
+      ssh_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."]
     }
   }
 
+  # Generate VM IDs automatically
+  vm_ids = { for idx, name in sort(keys(local.vm_configs)) :
+    name => local.base_vm_id + idx
+  }
+}
 ```
 
-### Extend disk on VM
+## Configuration Reference
 
+### VM Configuration Options
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `vm_id` | Unique ID for the VM | Required |
+| `memory` | RAM in MB | Required |
+| `cpu_cores` | Number of CPU cores | Required |
+| `cpu_type` | CPU type | Required |
+| `disks` | List of disk objects | Required |
+| `network_devices` | List of network device objects | Required |
+| `ip_configs` | List of IP configuration objects | Required |
+| `ssh_keys` | List of SSH public keys | Required |
+| `dns_servers` | List of DNS servers | `["1.1.1.1", "1.0.0.1"]` |
+| `vga_type` | VGA type | `"serial0"` |
+| `vga_memory` | VGA memory in MB | `16` |
+| `template_vm_id` | Template VM ID to clone from | `9000` |
+
+### Disk Configuration
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `interface` | Disk interface (e.g., scsi0, scsi1) | Required |
+| `size` | Disk size in GB | Required |
+| `file_format` | Disk format | `"raw"` |
+| `datastore_id` | Storage location | Module default |
+
+### Network Device Configuration
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `bridge` | Network bridge | `"vmbr0"` |
+| `model` | Network device model | `"virtio"` |
+| `enabled` | Whether network is enabled | `true` |
+| `vlan` | VLAN tag (1-4094) | `null` (no VLAN) |
+
+### IP Configuration
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `address` | IP address with subnet (CIDR notation) | Required |
+| `gateway` | Gateway IP address | Required |
+
+## Retrieving VM Password
+
+If you used `random_password` to generate a password, you can see it with:
+
+```bash
+tofu output -raw vm_password
 ```
-Make sure to install cloud-initramfs-growroot on your servers.
-
-```
-
-```
-
-Change the value of the disk_size in locales
-Example:
-disk_size = 35 > disk_size = 45
-Run tofu plan 
-The output should be something like this:
-
-```
-```
-OpenTofu will perform the following actions:
-
-  # module.proxmox_vms["server-clone-1"].proxmox_virtual_environment_vm.vm will be updated in-place
-  ~ resource "proxmox_virtual_environment_vm" "vm" {
-        id                      = "599"
-        name                    = "server-clone-1"
-        # (27 unchanged attributes hidden)
-
-      ~ disk {
-          ~ size              = 35 -> 45
-            # (11 unchanged attributes hidden)
-        }
-
-```
-So now just run tofu apply and let Terraform/Tofu do the rest, if the server is not resized make sure you have cloud-initramfs-growroot installed, and then just reboot it. 
-
-```
-
-### OpenTofu / Terraform deployment
-Run `tofu init`
-Allow tofu or terraform to install the providers.
-Run `tofu plan` and then `tofu apply`
-
-To see the random generated password: `tofu output -json | jq .` 
-
-### Don't want to clone but want to use the module?
-
-Update the main.tf chang the source = "./modules/vm" to point to the git repo module.
-
-`source = "git::https://github.com/dinodem/proxmox-terraform/tree/main/modules/vm"`
-
